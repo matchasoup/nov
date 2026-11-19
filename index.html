@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>🎂</title>
+    <link rel="stylesheet" href="style.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Bonbon&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div class="container">
+      <div id="birthdayText"></div>
+      <div class="cake-container">
+        <div class="cake" id="cake"></div>
+      </div>
+    </div>
+   
+<script>
+  const params = new URLSearchParams(window.location.search);
+  const name = params.get("name") || "P. Sea";
+
+  let candleCount = parseInt(params.get("candles")) || 4;
+  candleCount = Math.min(Math.max(candleCount, 1), 30);
+
+  const birthdayText = document.getElementById("birthdayText");
+
+  birthdayText.innerHTML = `
+    <div id="mainTitle">Happy Birthday, ${name}!</div>
+    <div id="subTitle">Make a wish and blow the candles!</div>
+  `;
+
+  const colors = [
+    "green-candle",
+    "purple-candle",
+    "blue-candle",
+    "yellow-candle",
+  ];
+
+  const cake = document.getElementById("cake");
+
+  const CANDLE_VISUAL_WIDTH = 10;
+
+  function createCandles(count) {
+    cake.innerHTML = "";
+
+    const availableWidth = 35;
+    const candlesPerRow = 6;
+    const shiftAmount = 4;
+
+    for (let i = 0; i < count; i++) {
+      const candle = document.createElement("div");
+
+      candle.classList.add("candle");
+
+      const colorClass =
+        colors[Math.floor(Math.random() * colors.length)];
+
+      candle.classList.add(colorClass);
+
+      const row = Math.floor(i / candlesPerRow);
+      const col = i % candlesPerRow;
+
+      const totalCandleInRow = Math.min(
+        candlesPerRow,
+        count - row * candlesPerRow
+      );
+
+      const rowSpacing =
+        availableWidth / (totalCandleInRow + 1);
+
+      const leftBase =
+        rowSpacing * (col + 1) -
+        CANDLE_VISUAL_WIDTH / 2 + 5;
+
+      const rowShift = row % 2 === 0 ? 0 : shiftAmount;
+
+      candle.style.position = "absolute";
+      candle.style.top = `${-45 + row * 15}px`;
+      candle.style.left = `${leftBase - rowShift + 4}px`;
+
+      cake.appendChild(candle);
+    }
+  }
+
+  createCandles(candleCount);
+
+let audioContext = null;
+let micStream = null;
+let animationId = null;
+let blown = false;
+let blowStartTime = null;
+
+async function startMicDetection() {
+  try {
+    if (micStream) return;
+
+    audioContext = new (
+  window.AudioContext || window.webkitAudioContext
+)();
+
+if (audioContext.state === "suspended") {
+  await audioContext.resume();
+}
+
+micStream = await navigator.mediaDevices.getUserMedia({
+  audio: {
+    echoCancellation: false,
+    noiseSuppression: false,
+    autoGainControl: false
+  }
+});
+
+    const source =
+      audioContext.createMediaStreamSource(micStream);
+
+    const analyser = audioContext.createAnalyser();
+
+    analyser.fftSize = 1024;
+    analyser.smoothingTimeConstant = 0.3;
+
+    source.connect(analyser);
+
+    const dataArray = new Uint8Array(analyser.fftSize);
+
+    const VOLUME_THRESHOLD = 0.015;
+    const BLOW_DURATION = 100;
+
+    blown = false;
+    blowStartTime = null;
+
+    function detectBlow() {
+      if (!micStream || blown) return;
+
+      analyser.getByteTimeDomainData(dataArray);
+
+      let sum = 0;
+      for (let i = 0; i < dataArray.length; i++) {
+        const sample = (dataArray[i] - 128) / 128;
+        sum += sample * sample;
+      }
+
+      const volume = Math.sqrt(sum / dataArray.length);
+      const isBlowing = volume > VOLUME_THRESHOLD;
+
+      if (isBlowing) {
+        if (blowStartTime === null) {
+          blowStartTime = performance.now();
+        }
+
+        if (performance.now() - blowStartTime >= BLOW_DURATION) {
+          blown = true;
+          blowOutCandles();
+          return;
+        }
+      } else {
+        blowStartTime = null;
+      }
+
+      animationId = requestAnimationFrame(detectBlow);
+    }
+
+    detectBlow();
+
+  } catch (err) {
+    console.error("Mic access error:", err);
+
+    stopMicDetection();
+
+    alert(
+      "Please allow microphone access to blow out the candles!"
+    );
+  }
+}
+
+
+// Stop Microphone
+
+function stopMicDetection() {
+  if (animationId !== null) {
+    cancelAnimationFrame(animationId);
+    animationId = null;
+  }
+
+  if (micStream) {
+    micStream.getTracks().forEach(track => track.stop());
+    micStream = null;
+  }
+
+  if (audioContext) {
+    const context = audioContext;
+    audioContext = null;
+    context.close().catch(console.error);
+  }
+
+  blowStartTime = null;
+}
+
+
+// Blow Out Candles
+
+function blowOutCandles() {
+  stopMicDetection();
+
+  const candles = document.querySelectorAll(".candle");
+
+  candles.forEach((candle) => {
+    const delay = Math.random() * 1000;
+
+    setTimeout(() => {
+      colors.forEach((color) => {
+        if (candle.classList.contains(color)) {
+          candle.classList.add("blown");
+        }
+      });
+    }, delay);
+  });
+
+  setTimeout(() => {
+    const subTitle = document.getElementById("subTitle");
+
+    if (subTitle) {
+      subTitle.textContent = "This cat is meowmeow cream cake. . . eat it!";
+    }
+  }, 1200);
+}
+
+// Restart Detection
+
+function restartBlowDetection() {
+  stopMicDetection();
+
+  blown = false;
+
+  document.querySelectorAll(".candle").forEach(candle => {
+    candle.classList.remove("blown");
+  });
+
+  startMicDetection();
+}
+
+
+// Start
+
+document.addEventListener("click", startMicDetection, {
+  once: true
+});
+    </script>
+  </body>
+</html>
